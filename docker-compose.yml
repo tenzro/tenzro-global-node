@@ -1,0 +1,52 @@
+# docker-compose.yml
+version: '3.8'
+
+services:
+  global-node:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: tenzro-global-node:latest
+    container_name: global-node
+    environment:
+      - NODE_ENV=production
+      - NODE_TYPE=global_node
+      - NODE_TIER=training
+      - REGION=${REGION:-us-east}
+      - TOKEN_BALANCE=10000
+      - DHT_ENABLED=true
+      - DHT_REFRESH_INTERVAL=60000
+      - DHT_REPLICATION_FACTOR=3
+      - METRICS_UPDATE_INTERVAL=15000
+      - HEALTH_CHECK_INTERVAL=30000
+      - WEBSOCKET_PING_INTERVAL=25000
+      - MIN_ACTIVE_PEERS_RATIO=0.7
+      - MIN_VALIDATORS=3
+      - BOOTSTRAP_NODES=${BOOTSTRAP_NODES:-}
+    ports:
+      - "${PORT:-8080}:8080"
+    volumes:
+      - global_data:/app/data
+    networks:
+      - tenzro-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 2G
+
+networks:
+  tenzro-network:
+    driver: bridge
+
+volumes:
+  global_data:

@@ -1,0 +1,118 @@
+# .github/workflows/ci.yml
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: '18'
+      - name: Install dependencies
+        run: npm ci
+      - name: Run tests
+        run: npm test
+      - name: Cache node modules
+        uses: actions/cache@v2
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node_modules-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node_modules-
+
+  build:
+    runs-on: ubuntu-latest
+    needs: test
+    services:
+      docker:
+        image: docker:20-dind
+        options: --privileged
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+      - name: Log in to Docker Hub
+        run: echo ${{ secrets.DOCKER_PASSWORD }} | docker login -u ${{ secrets.DOCKER_USERNAME }} --password-stdin
+      - name: Build and push Docker image
+        run: |
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/tenzro-global-node:${{ github.sha }} .
+          docker push ${{ secrets.DOCKER_USERNAME }}/tenzro-global-node:${{ github.sha }}
+          if [ "${{ github.ref }}" == "refs/heads/main" ]; then
+            docker tag ${{ secrets.DOCKER_USERNAME }}/tenzro-global-node:${{ github.sha }} ${{ secrets.DOCKER_USERNAME }}/tenzro-global-node:latest
+            docker push ${{ secrets.DOCKER_USERNAME }}/tenzro-global-node:latest
+          fi
+
+  deploy_staging:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v1
+        with:
+          version: 'latest'
+      - name: Deploy to staging
+        env:
+          KUBE_URL: ${{ secrets.KUBE_URL }}
+          KUBE_CA_PEM_FILE: ${{ secrets.KUBE_CA_PEM_FILE }}
+          KUBE_TOKEN: ${{ secrets.KUBE_TOKEN }}
+        run: |
+          kubectl config set-cluster k8s --server="${{ env.KUBE_URL }}" --certificate-authority="${{ env.KUBE_CA_PEM_FILE }}"
+          kubectl config set-credentials github --token="${{ env.KUBE_TOKEN }}"
+          kubectl config set-context default --cluster=k8s --user=github
+          kubectl config use-context default
+          kubectl apply -f - <<EOF
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: tenzro-global-node
+            namespace: staging
+          spec:
+            template:
+              spec:
+                containers:
+                  - name: tenzro-global-node
+                    image: ${{ secrets.DOCKER_USERNAME }}/tenzro-global-node:${{ github.sha }}
+          EOF
+
+  deploy_production:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    needs: build
+    steps:
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v1
+        with:
+          version: 'latest'
+      - name: Deploy to production
+        env:
+          KUBE_URL: ${{ secrets.KUBE_URL }}
+          KUBE_CA_PEM_FILE: ${{ secrets.KUBE_CA_PEM_FILE }}
+          KUBE_TOKEN: ${{ secrets.KUBE_TOKEN }}
+        run: |
+          kubectl config set-cluster k8s --server="${{ env.KUBE_URL }}" --certificate-authority="${{ env.KUBE_CA_PEM_FILE }}"
+          kubectl config set-credentials github --token="${{ env.KUBE_TOKEN }}"
+          kubectl config set-context default --cluster=k8s --user=github
+          kubectl config use-context default
+          kubectl apply -f - <<EOF
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: tenzro-global-node
+            namespace: production
+          spec:
+            template:
+              spec:
+                containers:
+                  - name: tenzro-global-node
+                    image: ${{ secrets.DOCKER_USERNAME }}/tenzro-global-node:${{ github.sha }}
+          EOF
