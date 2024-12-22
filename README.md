@@ -1,6 +1,6 @@
 # Tenzro Global Node
 
-A global validator node for the Tenzro Network, responsible for network coordination, task distribution, and cross-regional task management.
+A global node for the Tenzro Network, responsible for network coordination, task distribution, and cross-regional task management.
 
 ## Features
 
@@ -22,7 +22,7 @@ A global validator node for the Tenzro Network, responsible for network coordina
 
 ```bash
 # Clone the repository
-git clone https://github.com/tenzronetwork/global-node.git
+git clone https://github.com/tenzro/global-node.git
 cd global-node
 
 # Install dependencies
@@ -234,4 +234,4 @@ Licensed under the Apache 2.0 License - see the [LICENSE](LICENSE) file for deta
 
 - Website: https://tenzro.org
 - GitHub: https://github.com/tenzro
-- Discord: https://x.com/tenzr0
+- X: https://x.com/tenzr0
